@@ -52,6 +52,8 @@ export class MfeStateService implements OnDestroy {
    */
   private readonly inboundValues = new Map<string, unknown>();
 
+  private readonly storage: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null;
+
   private readonly channel = typeof BroadcastChannel !== 'undefined'
     ? new BroadcastChannel(CHANNEL_NAME)
     : null;
@@ -61,14 +63,14 @@ export class MfeStateService implements OnDestroy {
 
     for (const [key, defaultValue] of Object.entries(initialState)) {
       this.defaults.set(key, defaultValue);
-      const raw = localStorage.getItem(key);
+      const raw = this.storage?.getItem(key) ?? null;
       const value = raw !== null ? deserialize(raw, defaultValue) : defaultValue;
       const s = signal(value);
       this.signals.set(key, s);
 
       effect(() => {
         const current = s();
-        localStorage.setItem(key, serialize(current));
+        this.storage?.setItem(key, serialize(current));
         // Skip broadcast if this value arrived from another tab to prevent echo loops.
         if (stateEqual(current, this.inboundValues.get(key))) {
           this.inboundValues.delete(key);

@@ -1,6 +1,6 @@
 {
   "name": "@dever-labs/ngx-mfe-broker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Angular Signals + BroadcastChannel state broker for micro-frontends. Synchronises state across MFEs and browser tabs via localStorage persistence and BroadcastChannel cross-tab sync.",
   "keywords": [
     "angular",
@@ -31,13 +31,9 @@
     "npm": ">=9.0.0"
   },
   "peerDependencies": {
-    "@angular/common": ">=22.0.0",
     "@angular/core": ">=22.0.0"
   },
   "peerDependenciesMeta": {
-    "@angular/common": {
-      "optional": false
-    },
     "@angular/core": {
       "optional": false
     }

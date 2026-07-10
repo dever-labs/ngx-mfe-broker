@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-07-10
+
+### Fixed
+- `MfeStateService`: guard `localStorage` with `typeof localStorage !== 'undefined'` to prevent `ReferenceError` in SSR/non-browser environments (BroadcastChannel was already guarded)
+- `ConfigRepositoryService`: replaced `queueMicrotask`-based inbound-key guard with a value-based `inboundValues` map — consistent with `MfeStateService` and immune to microtask timing races
+- `ConfigRepositoryService`: same SSR guard applied to all `localStorage` accesses
+- Removed unused `@angular/common` peer dependency
+
+### Added
+- `vitest.config.ts` + `test-setup.ts` enabling `npx vitest run` without Angular CLI
+
 ## [0.1.0] - 2025-07-10
 
 ### Added
