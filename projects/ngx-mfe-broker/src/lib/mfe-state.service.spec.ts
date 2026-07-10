@@ -14,7 +14,6 @@ class MockBroadcastChannel {
     this.listeners.push(fn);
   });
 
-  /** Simulate receiving a message from another tab. */
   receive(data: unknown): void {
     this.listeners.forEach(fn => fn(new MessageEvent('message', { data })));
   }
@@ -128,6 +127,11 @@ describe('MfeStateService', () => {
     const { svc } = setup({ count: 0 });
     svc.get<number>('count').update(n => n + 1);
     expect(svc.get<number>('count')()).toBe(1);
+  });
+
+  it('throws when getting an unregistered key', () => {
+    const { svc } = setup({ theme: 'light' });
+    expect(() => svc.get('unknown')).toThrow(/Unknown state key "unknown"/);
   });
 
   it('ngOnDestroy closes the channel', () => {

@@ -112,6 +112,15 @@ describe('ConfigRepositoryService', () => {
     expect(svc.get('b')).toBeNull();
   });
 
+  it('clear() only removes its own localStorage keys, not unrelated entries', () => {
+    localStorage.setItem('unrelated', 'should-survive');
+    const { svc } = setup();
+    svc.set('a', '1');
+    svc.clear();
+    expect(localStorage.getItem('unrelated')).toBe('should-survive');
+    expect(localStorage.getItem('a')).toBeNull();
+  });
+
   it('clear() broadcasts via BroadcastChannel', () => {
     const { svc, channel } = setup();
     channel.postMessage.mockClear();
@@ -119,27 +128,31 @@ describe('ConfigRepositoryService', () => {
     expect(channel.postMessage).toHaveBeenCalledWith({ type: 'clear' });
   });
 
-  it('receives cross-tab set message and updates signal', () => {
+  it('receives cross-tab set message, updates signal and localStorage', () => {
     const { svc, channel } = setup();
-    svc.getSignal('key'); // initialise signal
+    svc.getSignal('key');
     channel.receive({ type: 'set', key: 'key', value: 'from-other-tab' });
     expect(svc.get('key')).toBe('from-other-tab');
+    expect(localStorage.getItem('key')).toBe('from-other-tab');
   });
 
-  it('receives cross-tab remove message and nulls signal', () => {
+  it('receives cross-tab remove message, nulls signal and localStorage', () => {
     const { svc, channel } = setup();
     svc.set('key', 'value');
     channel.receive({ type: 'remove', key: 'key' });
     expect(svc.get('key')).toBeNull();
+    expect(localStorage.getItem('key')).toBeNull();
   });
 
-  it('receives cross-tab clear message and nulls all signals', () => {
+  it('receives cross-tab clear message, nulls all signals and localStorage', () => {
     const { svc, channel } = setup();
     svc.set('a', '1');
     svc.set('b', '2');
     channel.receive({ type: 'clear' });
     expect(svc.get('a')).toBeNull();
     expect(svc.get('b')).toBeNull();
+    expect(localStorage.getItem('a')).toBeNull();
+    expect(localStorage.getItem('b')).toBeNull();
   });
 
   it('does not re-broadcast received cross-tab set message', () => {
