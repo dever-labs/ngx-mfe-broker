@@ -6,14 +6,19 @@ A lightweight library that synchronises state across Angular micro-frontends and
 
 ## Why?
 
-When using [Native Federation](https://github.com/angular-architects/native-federation) or any Angular micro-frontend architecture, each remote MFE shares the same Angular singleton (if configured correctly), but state changes in one MFE still don't propagate across **browser tabs**. This library fills that gap.
+When using [Native Federation](https://github.com/angular-architects/native-federation) or any Angular micro-frontend architecture, each remote MFE shares the same Angular singleton. State changes in one MFE propagate instantly within the same page — but not across **browser tabs**. This library fills that gap.
 
 | Problem | Solution |
 |---|---|
 | Theme change in one tab doesn't reflect in others | `MfeStateService` broadcasts via BroadcastChannel |
 | Arbitrary config values aren't reactive | `ConfigRepositoryService` — signals backed by localStorage |
-| Menu items lost on reload | `MenuRegistryService` — load from API once, share via Signal |
-| Cross-MFE search/command palette trigger | `MfeStateService.openSearch()` |
+| Page refresh loses shared state | Both services persist to localStorage automatically |
+
+## Requirements
+
+- Angular 22+
+- Modern browser (BroadcastChannel supported in all current browsers; gracefully skipped in SSR/non-browser environments)
+- Node.js 20+
 
 ## Installation
 
@@ -23,9 +28,10 @@ npm install @dever-labs/ngx-mfe-broker
 
 ## Setup
 
-In each micro-frontend's `app.config.ts`, define your state shape and defaults:
+Call `provideNgxMfeBroker()` **once** — in the shell's `app.config.ts`. Remote MFEs reuse the shell's Angular singleton and do not call it again.
 
 ```typescript
+// shell/src/app/app.config.ts
 import { provideNgxMfeBroker } from '@dever-labs/ngx-mfe-broker';
 
 export const appConfig: ApplicationConfig = {
@@ -34,18 +40,18 @@ export const appConfig: ApplicationConfig = {
       initialState: {
         theme: 'light',   // string
         token: null,      // string | null
-        users: [],        // array — serialised as JSON
+        users: [],        // array — serialised as JSON automatically
       }
     }),
   ]
 };
 ```
 
-> All MFEs should provide the same `initialState` shape so their signals stay in sync.
+> **Important:** `get(key)` throws if the key was not registered in `initialState`. All state keys must be declared upfront.
 
 ## Usage
 
-### Typed state with `MfeStateService`
+### `MfeStateService` — typed shared state
 
 ```typescript
 import { inject } from '@angular/core';
@@ -55,17 +61,17 @@ import { MfeStateService } from '@dever-labs/ngx-mfe-broker';
 export class ThemeService {
   private readonly mfe = inject(MfeStateService);
 
-  readonly theme = this.mfe.get<string>('theme');
+  readonly theme = this.mfe.get<string>('theme'); // WritableSignal<string>
 
   setTheme(theme: string): void {
-    this.mfe.set('theme', theme);
+    this.mfe.set('theme', theme); // persists + broadcasts cross-tab
   }
 }
 ```
 
-### Generic key-value config with `ConfigRepositoryService`
+### `ConfigRepositoryService` — generic string KV store
 
-For arbitrary string values that should persist and sync cross-tab:
+For arbitrary string values that should persist and sync cross-tab independently of `MfeStateService`:
 
 ```typescript
 import { inject } from '@angular/core';
@@ -75,7 +81,7 @@ import { ConfigRepositoryService } from '@dever-labs/ngx-mfe-broker';
 export class ApiConfigService {
   private readonly config = inject(ConfigRepositoryService);
 
-  readonly apiUrl = this.config.getSignal('apiUrl');
+  readonly apiUrl = this.config.getSignal('apiUrl'); // Signal<string | null>
 
   setApiUrl(url: string): void {
     this.config.set('apiUrl', url);
@@ -83,36 +89,22 @@ export class ApiConfigService {
 }
 ```
 
-### Menu registry with `MenuRegistryService`
+## How it works
 
-```typescript
-import { inject } from '@angular/core';
-import { MenuRegistryService } from '@dever-labs/ngx-mfe-broker';
-
-// Shell: load menu from API
-const menu = inject(MenuRegistryService);
-menu.load(await fetch('/api/menu').then(r => r.json()));
-
-// MFE: register a dynamic item
-menu.register({ label: 'Reports', path: '/reports', icon: 'pi pi-chart-bar' });
-
-// Template:
-@Component({
-  template: `@for (item of menu.items(); track item.path) { ... }`
-})
+```
+MFE A calls set('theme', 'dark')
+  → Signal.set('dark')
+  → effect() → localStorage.setItem('theme', 'dark')
+  → BroadcastChannel.postMessage({ key: 'theme', value: 'dark' })
+      → Tab B receives message
+      → Signal.set('dark')  (inbound-key guard prevents echo loop)
+      → effect() skips broadcast (key in guard)
 ```
 
-### Cross-MFE search / command palette
-
-```typescript
-// Trigger from any MFE or tab:
-inject(MfeStateService).openSearch();
-
-// Listen in the shell:
-effect(() => {
-  if (mfeState.searchOpen() > 0) showCommandPalette();
-});
-```
+- **Same page**: Signals propagate instantly (shared Angular singleton via Native Federation)
+- **Cross-tab**: BroadcastChannel delivers updates to all other tabs on the same origin
+- **Persistence**: localStorage survives page refresh; values are restored on init
+- **No echo loops**: Inbound-key guard + microtask clear prevents re-broadcasting received updates
 
 ## API
 
@@ -120,75 +112,31 @@ effect(() => {
 
 | Field | Type | Description |
 |---|---|---|
-| `initialState` | `Record<string, unknown>` | State keys with their default values |
+| `initialState` | `Record<string, unknown>` | All state keys with their default values. Keys not listed here cannot be used at runtime. |
 
 ### `MfeStateService`
 
-| Method/Property | Description |
-|---|---|
-| `get<T>(key)` | Returns a `WritableSignal<T>` backed by localStorage |
-| `set<T>(key, value)` | Sets value — persists + broadcasts cross-tab |
-| `searchOpen` | `Signal<number>` — increments each time search should open |
-| `openSearch()` | Increments `searchOpen` and broadcasts to all tabs |
+| Method | Signature | Description |
+|---|---|---|
+| `get<T>(key)` | `(key: string) => WritableSignal<T>` | Returns the signal for a registered key. Throws if the key was not in `initialState`. |
+| `set<T>(key, value)` | `(key: string, value: T) => void` | Updates the signal, persists to localStorage, broadcasts cross-tab. |
 
 ### `ConfigRepositoryService`
 
-| Method | Description |
-|---|---|
-| `getSignal(key)` | Returns a readonly `Signal<string \| null>` |
-| `get(key)` | Returns current `string \| null` value |
-| `set(key, value)` | Persists + broadcasts cross-tab |
-| `remove(key)` | Removes from localStorage + broadcasts |
-| `clear()` | Clears all localStorage + broadcasts |
-
-### `MenuRegistryService`
-
-| Method/Property | Description |
-|---|---|
-| `items` | Readonly `Signal<MenuItem[]>` |
-| `load(items)` | Replace full menu list |
-| `register(item)` | Add or update an item (matched by `path`) |
-| `unregister(path)` | Remove an item by path |
-
-### `MenuItem`
-
-```typescript
-interface MenuItem {
-  label: string;
-  path: string;
-  icon?: string;
-  remoteEntry?: string;
-  remoteName?: string;
-  exposedModule?: string;
-  children?: MenuItem[];
-}
-```
-
-## How it works
-
-```
-MFE A sets value
-  → Signal.set()
-  → effect() writes to localStorage
-  → BroadcastChannel.postMessage()
-      → MFE B tab receives message
-      → Signal.set() (inbound guard prevents echo loop)
-```
-
-- **Same page**: Signals propagate instantly (shared singleton via Native Federation)
-- **Cross-tab**: BroadcastChannel delivers updates to all other tabs on the same origin
-- **Persistence**: localStorage survives page refresh
-- **No echo loops**: Inbound-key guard + microtask clear prevents re-broadcasting received updates
-
-## Requirements
-
-- Angular 22+
-- Modern browser (BroadcastChannel supported in all current browsers; gracefully skipped in SSR/non-browser environments)
+| Method | Signature | Description |
+|---|---|---|
+| `getSignal(key)` | `(key: string) => Signal<string \| null>` | Readonly signal; initialised from localStorage. |
+| `get(key)` | `(key: string) => string \| null` | Current value. |
+| `set(key, value)` | `(key: string, value: string) => void` | Persists + broadcasts cross-tab. |
+| `remove(key)` | `(key: string) => void` | Removes from localStorage + broadcasts. |
+| `clear()` | `() => void` | Removes **only keys written by this service** from localStorage + broadcasts. |
 
 ## Building
 
 ```bash
-ng build ngx-mfe-broker
+npm run build   # ng build ngx-mfe-broker --configuration production
+npm test        # Vitest unit tests
+npm run lint    # ESLint
 ```
 
 ## License

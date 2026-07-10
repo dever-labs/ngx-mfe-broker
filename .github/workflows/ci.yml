@@ -26,6 +26,16 @@ jobs:
       - name: Run tests
         run: npm test -- --watch=false
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/ngx-mfe-broker
+          retention-days: 1
+
   publish:
     needs: build
     runs-on: ubuntu-latest
@@ -34,18 +44,16 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
           registry-url: https://registry.npmjs.org
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build library
-        run: npm run build
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/ngx-mfe-broker
 
       - name: Publish to npm
         run: npm publish dist/ngx-mfe-broker --access public --provenance

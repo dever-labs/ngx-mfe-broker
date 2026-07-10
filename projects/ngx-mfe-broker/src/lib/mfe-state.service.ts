@@ -74,7 +74,7 @@ export class MfeStateService implements OnDestroy {
       if (!s) return;
       if (stateEqual(s(), data.value)) return;
       this.inboundKeys.add(data.key);
-      s.set(data.value as never);
+      s.set(data.value);
       queueMicrotask(() => this.inboundKeys.delete(data.key));
     });
   }

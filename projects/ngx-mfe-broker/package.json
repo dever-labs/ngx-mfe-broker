@@ -25,6 +25,12 @@
   "dependencies": {
     "tslib": "^2.3.0"
   },
-  "sideEffects": false
+  "sideEffects": false,
+  "bugs": {
+    "url": "https://github.com/dever-labs/ngx-mfe-broker/issues"
+  },
+  "homepage": "https://github.com/dever-labs/ngx-mfe-broker#readme",
+  "engines": {
+    "node": ">=20.0.0"
+  }
 }
-

@@ -93,7 +93,7 @@ describe('MfeStateService', () => {
   });
 
   it('does not re-broadcast received cross-tab messages (no echo loop)', () => {
-    const { svc, channel } = setup();
+    const { channel } = setup();
     TestBed.flushEffects();
     channel.postMessage.mockClear();
 
