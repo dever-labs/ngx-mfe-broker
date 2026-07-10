@@ -5,12 +5,14 @@ export interface MenuItem {
   path: string;
   /** Optional icon identifier (e.g. PrimeNG icon class). */
   icon?: string;
-  /** Path to the remote entry JSON served by this micro-frontend. */
-  remoteEntry?: string;
-  /** Name of the Native Federation remote. */
-  remoteName?: string;
-  /** Exposed module to load from the remote. */
-  exposedModule?: string;
-  /** Nested child items. */
-  children?: MenuItem[];
+  /** Optional group/category label for visual grouping in the menu. */
+  group?: string;
+  /** Name of the Native Federation remote (unique key, e.g. "overview"). */
+  remote: string;
+  /** Path to the remote's remoteEntry.json (e.g. "/remotes/overview/remoteEntry.json"). */
+  remoteEntry: string;
+  /** Exposed module path on the remote (e.g. "./routes"). */
+  exposedModule: string;
+  /** Exported routes array name on the remote module (defaults to "APP_ROUTES"). */
+  routesExport?: string;
 }
