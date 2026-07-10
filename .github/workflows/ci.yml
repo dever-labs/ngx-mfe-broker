@@ -56,6 +56,7 @@ jobs:
           path: dist/ngx-mfe-broker
 
       - name: Publish to npm
-        run: npm publish dist/ngx-mfe-broker --access public --provenance
+        working-directory: dist/ngx-mfe-broker
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
