@@ -45,8 +45,7 @@ describe('MfeStateService', () => {
     });
     return {
       svc: TestBed.inject(MfeStateService),
-      get stateChannel() { return MockBroadcastChannel.instances[0]; },
-      get searchChannel() { return MockBroadcastChannel.instances[1]; },
+      get channel() { return MockBroadcastChannel.instances[0]; },
     };
   }
 
@@ -76,40 +75,40 @@ describe('MfeStateService', () => {
   });
 
   it('set() broadcasts via BroadcastChannel', () => {
-    const { svc, stateChannel } = setup();
+    const { svc, channel } = setup();
     TestBed.flushEffects();
-    stateChannel.postMessage.mockClear();
+    channel.postMessage.mockClear();
 
     svc.set('theme', 'dark');
     TestBed.flushEffects();
 
-    expect(stateChannel.postMessage).toHaveBeenCalledWith(
+    expect(channel.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ key: 'theme', value: 'dark' }),
     );
   });
 
   it('receives cross-tab message and updates signal', () => {
-    const { svc, stateChannel } = setup();
-    stateChannel.receive({ key: 'theme', value: 'dark' });
+    const { svc, channel } = setup();
+    channel.receive({ key: 'theme', value: 'dark' });
     expect(svc.get<string>('theme')()).toBe('dark');
   });
 
   it('does not re-broadcast received cross-tab messages (no echo loop)', () => {
-    const { svc, stateChannel } = setup();
+    const { svc, channel } = setup();
     TestBed.flushEffects();
-    stateChannel.postMessage.mockClear();
+    channel.postMessage.mockClear();
 
-    stateChannel.receive({ key: 'theme', value: 'dark' });
+    channel.receive({ key: 'theme', value: 'dark' });
     TestBed.flushEffects();
 
-    expect(stateChannel.postMessage).not.toHaveBeenCalled();
+    expect(channel.postMessage).not.toHaveBeenCalled();
   });
 
   it('ignores cross-tab message when value is unchanged', () => {
-    const { svc, stateChannel } = setup({ theme: 'light' });
-    const signal = svc.get<string>('theme');
-    stateChannel.receive({ key: 'theme', value: 'light' });
-    expect(signal()).toBe('light');
+    const { svc, channel } = setup({ theme: 'light' });
+    const sig = svc.get<string>('theme');
+    channel.receive({ key: 'theme', value: 'light' });
+    expect(sig()).toBe('light');
   });
 
   it('serialises arrays as JSON in localStorage', () => {
@@ -125,29 +124,15 @@ describe('MfeStateService', () => {
     expect(svc.get<string[]>('users')()).toEqual(['alice', 'bob']);
   });
 
-  it('openSearch() increments searchOpen signal', () => {
-    const { svc } = setup();
-    expect(svc.searchOpen()).toBe(0);
-    svc.openSearch();
-    expect(svc.searchOpen()).toBe(1);
+  it('supports numeric state values (e.g. counters)', () => {
+    const { svc } = setup({ count: 0 });
+    svc.get<number>('count').update(n => n + 1);
+    expect(svc.get<number>('count')()).toBe(1);
   });
 
-  it('openSearch() posts to search channel', () => {
-    const { svc, searchChannel } = setup();
-    svc.openSearch();
-    expect(searchChannel.postMessage).toHaveBeenCalledWith('open');
-  });
-
-  it('search channel message increments searchOpen', () => {
-    const { svc, searchChannel } = setup();
-    searchChannel.receive('open');
-    expect(svc.searchOpen()).toBe(1);
-  });
-
-  it('ngOnDestroy closes both channels', () => {
-    const { svc, stateChannel, searchChannel } = setup();
+  it('ngOnDestroy closes the channel', () => {
+    const { svc, channel } = setup();
     svc.ngOnDestroy();
-    expect(stateChannel.close).toHaveBeenCalled();
-    expect(searchChannel.close).toHaveBeenCalled();
+    expect(channel.close).toHaveBeenCalled();
   });
 });
