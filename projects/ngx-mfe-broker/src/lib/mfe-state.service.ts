@@ -44,7 +44,13 @@ type StateMessage = { key: string; value: unknown };
 export class MfeStateService implements OnDestroy {
   private readonly signals = new Map<string, WritableSignal<unknown>>();
   private readonly defaults = new Map<string, unknown>();
-  private readonly inboundKeys = new Set<string>();
+  /**
+   * Value-based guard: stores the last value received from another tab for
+   * each key. The effect checks this map instead of a time-sensitive Set so
+   * the check happens at effect execution time — guaranteed after the signal
+   * update — rather than racing against queueMicrotask cleanup.
+   */
+  private readonly inboundValues = new Map<string, unknown>();
 
   private readonly channel = typeof BroadcastChannel !== 'undefined'
     ? new BroadcastChannel(CHANNEL_NAME)
@@ -63,9 +69,12 @@ export class MfeStateService implements OnDestroy {
       effect(() => {
         const current = s();
         localStorage.setItem(key, serialize(current));
-        if (!this.inboundKeys.has(key)) {
-          this.channel?.postMessage({ key, value: current } satisfies StateMessage);
+        // Skip broadcast if this value arrived from another tab to prevent echo loops.
+        if (stateEqual(current, this.inboundValues.get(key))) {
+          this.inboundValues.delete(key);
+          return;
         }
+        this.channel?.postMessage({ key, value: current } satisfies StateMessage);
       });
     }
 
@@ -73,9 +82,10 @@ export class MfeStateService implements OnDestroy {
       const s = this.signals.get(data.key);
       if (!s) return;
       if (stateEqual(s(), data.value)) return;
-      this.inboundKeys.add(data.key);
+      // Record the inbound value before updating the signal. The effect will
+      // read inboundValues synchronously during its execution and clear the entry.
+      this.inboundValues.set(data.key, data.value);
       s.set(data.value);
-      queueMicrotask(() => this.inboundKeys.delete(data.key));
     });
   }
 

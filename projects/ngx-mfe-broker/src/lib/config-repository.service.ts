@@ -5,7 +5,7 @@ const CHANNEL_NAME = '@dever-labs/ngx-mfe-broker:config';
 type ConfigMessage =
   | { type: 'set'; key: string; value: string }
   | { type: 'remove'; key: string }
-  | { type: 'clear' };
+  | { type: 'clear'; keys: string[] };
 
 /**
  * Generic cross-tab string key-value store backed by localStorage.
@@ -26,12 +26,13 @@ export class ConfigRepositoryService implements OnDestroy {
   constructor() {
     this.channel?.addEventListener('message', ({ data }: MessageEvent<ConfigMessage>) => {
       if (data.type === 'clear') {
-        this.signals.forEach((s, k) => {
+        // Iterate only the keys the sender owned — not all signals on this tab.
+        data.keys.forEach(k => {
           this.inboundKeys.add(k);
           localStorage.removeItem(k);
-          s.set(null);
+          this.signals.get(k)?.set(null);
         });
-        queueMicrotask(() => this.inboundKeys.clear());
+        queueMicrotask(() => data.keys.forEach(k => this.inboundKeys.delete(k)));
       } else if (data.type === 'remove') {
         this.inboundKeys.add(data.key);
         localStorage.removeItem(data.key);
@@ -74,10 +75,13 @@ export class ConfigRepositoryService implements OnDestroy {
 
   /** Removes only keys written by this service — does not touch unrelated localStorage entries. */
   clear(): void {
-    this.ownedKeys.forEach(k => localStorage.removeItem(k));
+    const keys = [...this.ownedKeys];
+    keys.forEach(k => {
+      localStorage.removeItem(k);
+      this.signals.get(k)?.set(null);
+    });
     this.ownedKeys.clear();
-    this.signals.forEach(s => s.set(null));
-    this.channel?.postMessage({ type: 'clear' } satisfies ConfigMessage);
+    this.channel?.postMessage({ type: 'clear', keys } satisfies ConfigMessage);
   }
 
   ngOnDestroy(): void {

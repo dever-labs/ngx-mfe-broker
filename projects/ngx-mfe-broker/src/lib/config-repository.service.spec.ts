@@ -103,13 +103,15 @@ describe('ConfigRepositoryService', () => {
     );
   });
 
-  it('clear() nulls all signals', () => {
+  it('clear() nulls only owned signals, not read-only observed keys', () => {
     const { svc } = setup();
-    svc.set('a', '1');
-    svc.set('b', '2');
+    localStorage.setItem('external', 'keep-me');
+    svc.getSignal('external'); // observe but never write
+    svc.set('owned', '1');
     svc.clear();
-    expect(svc.get('a')).toBeNull();
-    expect(svc.get('b')).toBeNull();
+    expect(svc.get('owned')).toBeNull();
+    // signal for 'external' must NOT be nulled — it was never owned
+    expect(svc.get('external')).toBe('keep-me');
   });
 
   it('clear() only removes its own localStorage keys, not unrelated entries', () => {
@@ -121,11 +123,15 @@ describe('ConfigRepositoryService', () => {
     expect(localStorage.getItem('a')).toBeNull();
   });
 
-  it('clear() broadcasts via BroadcastChannel', () => {
+  it('clear() broadcasts with the list of keys being cleared', () => {
     const { svc, channel } = setup();
+    svc.set('a', '1');
+    svc.set('b', '2');
     channel.postMessage.mockClear();
     svc.clear();
-    expect(channel.postMessage).toHaveBeenCalledWith({ type: 'clear' });
+    expect(channel.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'clear', keys: expect.arrayContaining(['a', 'b']) }),
+    );
   });
 
   it('receives cross-tab set message, updates signal and localStorage', () => {
@@ -144,15 +150,16 @@ describe('ConfigRepositoryService', () => {
     expect(localStorage.getItem('key')).toBeNull();
   });
 
-  it('receives cross-tab clear message, nulls all signals and localStorage', () => {
+  it('receives cross-tab clear message, only removes sender-owned keys', () => {
     const { svc, channel } = setup();
     svc.set('a', '1');
-    svc.set('b', '2');
-    channel.receive({ type: 'clear' });
+    localStorage.setItem('external', 'keep-me');
+    svc.getSignal('external'); // observed but not owned by sender
+    channel.receive({ type: 'clear', keys: ['a'] }); // sender only owned 'a'
     expect(svc.get('a')).toBeNull();
-    expect(svc.get('b')).toBeNull();
     expect(localStorage.getItem('a')).toBeNull();
-    expect(localStorage.getItem('b')).toBeNull();
+    // 'external' not in sender's keys list — must survive
+    expect(localStorage.getItem('external')).toBe('keep-me');
   });
 
   it('does not re-broadcast received cross-tab set message', () => {

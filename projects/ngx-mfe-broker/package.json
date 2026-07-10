@@ -1,7 +1,7 @@
 {
   "name": "@dever-labs/ngx-mfe-broker",
   "version": "0.1.0",
-  "description": "Angular Signals + BroadcastChannel state broker for micro-frontends",
+  "description": "Angular Signals + BroadcastChannel state broker for micro-frontends. Synchronises state across MFEs and browser tabs via localStorage persistence and BroadcastChannel cross-tab sync.",
   "keywords": [
     "angular",
     "micro-frontends",
@@ -10,27 +10,40 @@
     "broadcast-channel",
     "state-management",
     "native-federation",
-    "cross-tab"
+    "cross-tab",
+    "localStorage"
   ],
-  "author": "Dever Labs",
+  "author": {
+    "name": "Dever Labs",
+    "url": "https://github.com/dever-labs"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/dever-labs/ngx-mfe-broker.git"
   },
-  "peerDependencies": {
-    "@angular/common": "^22.0.0",
-    "@angular/core": "^22.0.0"
-  },
-  "dependencies": {
-    "tslib": "^2.3.0"
-  },
-  "sideEffects": false,
   "bugs": {
     "url": "https://github.com/dever-labs/ngx-mfe-broker/issues"
   },
   "homepage": "https://github.com/dever-labs/ngx-mfe-broker#readme",
   "engines": {
-    "node": ">=20.0.0"
-  }
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
+  "peerDependencies": {
+    "@angular/common": ">=22.0.0",
+    "@angular/core": ">=22.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@angular/common": {
+      "optional": false
+    },
+    "@angular/core": {
+      "optional": false
+    }
+  },
+  "dependencies": {
+    "tslib": "^2.3.0"
+  },
+  "sideEffects": false
 }

@@ -97,6 +97,9 @@ describe('MfeStateService', () => {
     TestBed.flushEffects();
     channel.postMessage.mockClear();
 
+    // Simulate inbound cross-tab update then flush effects synchronously.
+    // The value-based guard checks inboundValues at effect execution time,
+    // so it is immune to microtask scheduling differences.
     channel.receive({ key: 'theme', value: 'dark' });
     TestBed.flushEffects();
 
