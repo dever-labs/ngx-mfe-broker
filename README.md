@@ -49,6 +49,150 @@ export const appConfig: ApplicationConfig = {
 
 > **Important:** `get(key)` throws if the key was not registered in `initialState`. All state keys must be declared upfront.
 
+## State Contract Pattern
+
+`@dever-labs/ngx-mfe-broker` is intentionally generic — it knows nothing about your app's domain. To get type safety and avoid magic strings across MFEs, introduce a **state contract**: a separate module that owns the state shape, typed keys, defaults, and a typed accessor.
+
+The contract is the only place the word `"theme"` (or any other key) appears as a string literal. Every MFE imports the contract — not the broker directly.
+
+```
+┌───────────────────────┐       ┌─────────────────────────────┐
+│  @dever-labs/         │       │  state contract              │
+│  ngx-mfe-broker       │◄──────│  (AppState, APP_STATE_KEYS,  │
+│  (generic)            │       │   APP_INITIAL_STATE,         │
+└───────────────────────┘       │   injectAppState)            │
+                                └──────────────┬──────────────┘
+                                               │ imported by
+                          ┌────────────────────┼────────────────────┐
+                          ▼                    ▼                    ▼
+                       shell               MFE A               MFE B
+```
+
+The contract lives in a different place depending on whether you have a monorepo or separate repos.
+
+---
+
+### Monorepo
+
+Create a local Angular library (e.g. `@app/mfe-state-model`) inside the same workspace:
+
+```
+angular-workspace/
+  projects/
+    mfe-state-model/          ← state contract library
+      src/lib/
+        app-state.model.ts
+        inject-app-state.ts
+    shell/
+    mfe-a/
+    mfe-b/
+```
+
+**`app-state.model.ts`**
+
+```typescript
+export interface AppState extends Record<string, unknown> {
+  theme: string;
+  token: string | null;
+  users: string[];
+  // add your own keys here — compile errors surface everywhere they're used
+}
+```
+
+**`inject-app-state.ts`**
+
+```typescript
+import { inject } from '@angular/core';
+import { MfeStateService } from '@dever-labs/ngx-mfe-broker';
+import { AppState } from './app-state.model';
+
+export const APP_STATE_KEYS: { [K in keyof AppState]: K } = {
+  theme: 'theme',
+  token: 'token',
+  users: 'users',
+} as const;
+
+export const APP_INITIAL_STATE: AppState = {
+  theme: 'light-theme',
+  token: null,
+  users: [],
+};
+
+export function injectAppState() {
+  const mfe = inject(MfeStateService);
+  return {
+    theme: mfe.get<AppState['theme']>(APP_STATE_KEYS.theme),
+    token: mfe.get<AppState['token']>(APP_STATE_KEYS.token),
+    users: mfe.get<AppState['users']>(APP_STATE_KEYS.users),
+  };
+}
+```
+
+**Shell `app.config.ts`** — only place that calls `provideNgxMfeBroker`:
+
+```typescript
+import { provideNgxMfeBroker } from '@dever-labs/ngx-mfe-broker';
+import { APP_INITIAL_STATE } from '@app/mfe-state-model';
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideNgxMfeBroker({ initialState: APP_INITIAL_STATE }),
+  ]
+};
+```
+
+**Any MFE** — just inject, no provider call:
+
+```typescript
+import { injectAppState } from '@app/mfe-state-model';
+
+@Component({ ... })
+export class ThemeToggleComponent {
+  readonly state = injectAppState();
+  // template: {{ state.theme() }}
+  // code:     state.theme.set('dark-theme')
+}
+```
+
+---
+
+### Non-monorepo (separate repos)
+
+Publish the state contract as its own npm package so all repos share the same type definitions and key constants.
+
+```
+@your-org/app-state-model      ← published to npm (or private registry)
+  src/
+    app-state.model.ts
+    inject-app-state.ts
+```
+
+Each MFE repo installs both packages:
+
+```bash
+npm install @dever-labs/ngx-mfe-broker @your-org/app-state-model
+```
+
+The contract package is tiny — just interfaces, constants, and the `inject` wrapper. It has no runtime behaviour and a single peer dependency on `@angular/core`.
+
+**`package.json` of the contract package:**
+
+```json
+{
+  "name": "@your-org/app-state-model",
+  "version": "1.0.0",
+  "peerDependencies": {
+    "@angular/core": ">=22.0.0",
+    "@dever-labs/ngx-mfe-broker": ">=0.1.0"
+  },
+  "sideEffects": false
+}
+```
+
+> **Versioning tip:** When you add or rename a key in `AppState`, bump the minor version of the contract package. All MFE repos that install it get compile errors immediately on update — exactly the desired behaviour.
+
+---
+
 ## Usage
 
 ### `MfeStateService` — typed shared state
@@ -71,7 +215,7 @@ export class ThemeService {
 
 ### `ConfigRepositoryService` — generic string KV store
 
-For arbitrary string values that should persist and sync cross-tab independently of `MfeStateService`:
+For arbitrary string values that should persist and sync cross-tab independently of the main state:
 
 ```typescript
 import { inject } from '@angular/core';
