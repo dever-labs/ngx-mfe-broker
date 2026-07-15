@@ -58,7 +58,7 @@ The contract is the only place the word `"theme"` (or any other key) appears as 
 ```
 ┌───────────────────────┐       ┌─────────────────────────────┐
 │  @dever-labs/         │       │  state contract              │
-│  ngx-mfe-broker       │◄──────│  (AppState, APP_STATE_KEYS,  │
+│  ngx-mfe-broker       │◄──────│  (AppState,                  │
 │  (generic)            │       │   APP_INITIAL_STATE,         │
 └───────────────────────┘       │   injectAppState)            │
                                 └──────────────┬──────────────┘
@@ -95,36 +95,30 @@ export interface AppState extends Record<string, unknown> {
   theme: string;
   token: string | null;
   users: string[];
-  // add your own keys here — compile errors surface everywhere they're used
+  // add keys here — compile errors surface everywhere they're used
 }
+
+// satisfies validates defaults against AppState at compile time
+export const APP_INITIAL_STATE = {
+  theme: 'light-theme',
+  token: null,
+  users: [],
+} satisfies AppState;
 ```
 
 **`inject-app-state.ts`**
 
 ```typescript
-import { inject } from '@angular/core';
+import { inject, WritableSignal } from '@angular/core';
 import { MfeStateService } from '@dever-labs/ngx-mfe-broker';
-import { AppState } from './app-state.model';
-
-export const APP_STATE_KEYS: { [K in keyof AppState]: K } = {
-  theme: 'theme',
-  token: 'token',
-  users: 'users',
-} as const;
-
-export const APP_INITIAL_STATE: AppState = {
-  theme: 'light-theme',
-  token: null,
-  users: [],
-};
+import { AppState, APP_INITIAL_STATE } from './app-state.model';
 
 export function injectAppState() {
   const mfe = inject(MfeStateService);
-  return {
-    theme: mfe.get<AppState['theme']>(APP_STATE_KEYS.theme),
-    token: mfe.get<AppState['token']>(APP_STATE_KEYS.token),
-    users: mfe.get<AppState['users']>(APP_STATE_KEYS.users),
-  };
+  // Keys are derived from APP_INITIAL_STATE — adding a key here wires it automatically
+  return Object.fromEntries(
+    (Object.keys(APP_INITIAL_STATE) as (keyof AppState)[]).map(key => [key, mfe.get(key)])
+  ) as { [K in keyof AppState]: WritableSignal<AppState[K]> };
 }
 ```
 
@@ -158,7 +152,7 @@ export class ThemeToggleComponent {
 
 ### Non-monorepo (separate repos)
 
-Publish the state contract as its own npm package so all repos share the same type definitions and key constants.
+Publish the state contract as its own npm package so all repos share the same type definitions and defaults.
 
 ```
 @your-org/app-state-model      ← published to npm (or private registry)
@@ -173,7 +167,7 @@ Each MFE repo installs both packages:
 npm install @dever-labs/ngx-mfe-broker @your-org/app-state-model
 ```
 
-The contract package is tiny — just interfaces, constants, and the `inject` wrapper. It has no runtime behaviour and a single peer dependency on `@angular/core`.
+The contract package is tiny — just an interface, initial values, and the `inject` wrapper. It has no runtime behaviour and a single peer dependency on `@angular/core`.
 
 **`package.json` of the contract package:**
 
