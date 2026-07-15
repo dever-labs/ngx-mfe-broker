@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-07-16
+
+### Changed
+- Root `README.md` rewritten as contributor/repo guide (structure, dev setup, scripts, release process)
+- `projects/ngx-mfe-broker/README.md` is now the consumer-facing docs published to npm (replaces Angular CLI scaffold placeholder)
+- Corrected "No echo loops" description to reflect value-based inbound guard (no microtask) introduced in 0.1.1
+- Added `NGX_MFE_INITIAL_STATE` injection token to the API reference
+- Added `npx vitest run` to the building/scripts section
+
 ## [0.1.1] - 2026-07-10
 
 ### Fixed

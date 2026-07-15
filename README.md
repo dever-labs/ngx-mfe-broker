@@ -1,287 +1,61 @@
-# @dever-labs/ngx-mfe-broker
+# ngx-mfe-broker
 
-> Angular Signals + BroadcastChannel state broker for micro-frontends
+> Monorepo for `@dever-labs/ngx-mfe-broker` — Angular Signals + BroadcastChannel state broker for micro-frontends.
 
-A lightweight library that synchronises state across Angular micro-frontends and browser tabs using **Angular Signals**, **BroadcastChannel**, and **localStorage** — with no external dependencies beyond Angular itself.
+[![npm](https://img.shields.io/npm/v/@dever-labs/ngx-mfe-broker)](https://www.npmjs.com/package/@dever-labs/ngx-mfe-broker)
+[![CI](https://github.com/dever-labs/ngx-mfe-broker/actions/workflows/ci.yml/badge.svg)](https://github.com/dever-labs/ngx-mfe-broker/actions)
 
-## Why?
+For **usage docs, installation, and API reference** see the [package README](projects/ngx-mfe-broker/README.md) (also published to npm).
 
-When using [Native Federation](https://github.com/angular-architects/native-federation) or any Angular micro-frontend architecture, each remote MFE shares the same Angular singleton. State changes in one MFE propagate instantly within the same page — but not across **browser tabs**. This library fills that gap.
+---
 
-| Problem | Solution |
-|---|---|
-| Theme change in one tab doesn't reflect in others | `MfeStateService` broadcasts via BroadcastChannel |
-| Arbitrary config values aren't reactive | `ConfigRepositoryService` — signals backed by localStorage |
-| Page refresh loses shared state | Both services persist to localStorage automatically |
+## Repository structure
 
-## Requirements
+```
+projects/
+  ngx-mfe-broker/         ← library source + package README (published to npm)
+    src/lib/
+      mfe-state.service.ts
+      config-repository.service.ts
+      provide-ngx-mfe-broker.ts
+    README.md             ← consumer-facing docs
+dist/                     ← build output (gitignored)
+```
 
-- Angular 22+
-- Modern browser (BroadcastChannel supported in all current browsers; gracefully skipped in SSR/non-browser environments)
+## Prerequisites
+
 - Node.js 20+
+- npm 9+
 
-## Installation
-
-```bash
-npm install @dever-labs/ngx-mfe-broker
-```
-
-## Setup
-
-Call `provideNgxMfeBroker()` **once** — in the shell's `app.config.ts`. Remote MFEs reuse the shell's Angular singleton and do not call it again.
-
-```typescript
-// shell/src/app/app.config.ts
-import { provideNgxMfeBroker } from '@dever-labs/ngx-mfe-broker';
-
-export const appConfig: ApplicationConfig = {
-  providers: [
-    provideNgxMfeBroker({
-      initialState: {
-        theme: 'light',   // string
-        token: null,      // string | null
-        users: [],        // array — serialised as JSON automatically
-      }
-    }),
-  ]
-};
-```
-
-> **Important:** `get(key)` throws if the key was not registered in `initialState`. All state keys must be declared upfront.
-
-## State Contract Pattern
-
-`@dever-labs/ngx-mfe-broker` is intentionally generic — it knows nothing about your app's domain. To get type safety and avoid magic strings across MFEs, introduce a **state contract**: a separate module that owns the state shape, typed keys, defaults, and a typed accessor.
-
-The contract is the only place the word `"theme"` (or any other key) appears as a string literal. Every MFE imports the contract — not the broker directly.
-
-```
-┌───────────────────────┐       ┌─────────────────────────────┐
-│  @dever-labs/         │       │  state contract              │
-│  ngx-mfe-broker       │◄──────│  (AppState, APP_STATE_KEYS,  │
-│  (generic)            │       │   APP_INITIAL_STATE,         │
-└───────────────────────┘       │   injectAppState)            │
-                                └──────────────┬──────────────┘
-                                               │ imported by
-                          ┌────────────────────┼────────────────────┐
-                          ▼                    ▼                    ▼
-                       shell               MFE A               MFE B
-```
-
-The contract lives in a different place depending on whether you have a monorepo or separate repos.
-
----
-
-### Monorepo
-
-Create a local Angular library (e.g. `@app/mfe-state-model`) inside the same workspace:
-
-```
-angular-workspace/
-  projects/
-    mfe-state-model/          ← state contract library
-      src/lib/
-        app-state.model.ts
-        inject-app-state.ts
-    shell/
-    mfe-a/
-    mfe-b/
-```
-
-**`app-state.model.ts`**
-
-```typescript
-export interface AppState extends Record<string, unknown> {
-  theme: string;
-  token: string | null;
-  users: string[];
-  // add your own keys here — compile errors surface everywhere they're used
-}
-```
-
-**`inject-app-state.ts`**
-
-```typescript
-import { inject } from '@angular/core';
-import { MfeStateService } from '@dever-labs/ngx-mfe-broker';
-import { AppState } from './app-state.model';
-
-export const APP_STATE_KEYS: { [K in keyof AppState]: K } = {
-  theme: 'theme',
-  token: 'token',
-  users: 'users',
-} as const;
-
-export const APP_INITIAL_STATE: AppState = {
-  theme: 'light-theme',
-  token: null,
-  users: [],
-};
-
-export function injectAppState() {
-  const mfe = inject(MfeStateService);
-  return {
-    theme: mfe.get<AppState['theme']>(APP_STATE_KEYS.theme),
-    token: mfe.get<AppState['token']>(APP_STATE_KEYS.token),
-    users: mfe.get<AppState['users']>(APP_STATE_KEYS.users),
-  };
-}
-```
-
-**Shell `app.config.ts`** — only place that calls `provideNgxMfeBroker`:
-
-```typescript
-import { provideNgxMfeBroker } from '@dever-labs/ngx-mfe-broker';
-import { APP_INITIAL_STATE } from '@app/mfe-state-model';
-
-export const appConfig: ApplicationConfig = {
-  providers: [
-    provideNgxMfeBroker({ initialState: APP_INITIAL_STATE }),
-  ]
-};
-```
-
-**Any MFE** — just inject, no provider call:
-
-```typescript
-import { injectAppState } from '@app/mfe-state-model';
-
-@Component({ ... })
-export class ThemeToggleComponent {
-  readonly state = injectAppState();
-  // template: {{ state.theme() }}
-  // code:     state.theme.set('dark-theme')
-}
-```
-
----
-
-### Non-monorepo (separate repos)
-
-Publish the state contract as its own npm package so all repos share the same type definitions and key constants.
-
-```
-@your-org/app-state-model      ← published to npm (or private registry)
-  src/
-    app-state.model.ts
-    inject-app-state.ts
-```
-
-Each MFE repo installs both packages:
+## Development setup
 
 ```bash
-npm install @dever-labs/ngx-mfe-broker @your-org/app-state-model
+npm ci
 ```
 
-The contract package is tiny — just interfaces, constants, and the `inject` wrapper. It has no runtime behaviour and a single peer dependency on `@angular/core`.
+## Scripts
 
-**`package.json` of the contract package:**
+| Command | Description |
+|---|---|
+| `npm run build` | Build the library (`dist/ngx-mfe-broker`) |
+| `npm test` | Run Vitest tests via Angular CLI |
+| `npx vitest run` | Run Vitest directly (no Angular CLI) |
+| `npm run lint` | ESLint |
 
-```json
-{
-  "name": "@your-org/app-state-model",
-  "version": "1.0.0",
-  "peerDependencies": {
-    "@angular/core": ">=22.0.0",
-    "@dever-labs/ngx-mfe-broker": ">=0.1.0"
-  },
-  "sideEffects": false
-}
-```
+## Release process
 
-> **Versioning tip:** When you add or rename a key in `AppState`, bump the minor version of the contract package. All MFE repos that install it get compile errors immediately on update — exactly the desired behaviour.
+Releases are fully automated via GitHub Actions:
 
----
+1. Update `projects/ngx-mfe-broker/package.json` version
+2. Add an entry to `CHANGELOG.md`
+3. Push a tag matching `v*` (e.g. `v0.2.0`) — CI builds, tests, lints, and publishes to npm with provenance
 
-## Usage
+## Contributing
 
-### `MfeStateService` — typed shared state
-
-```typescript
-import { inject } from '@angular/core';
-import { MfeStateService } from '@dever-labs/ngx-mfe-broker';
-
-@Injectable({ providedIn: 'root' })
-export class ThemeService {
-  private readonly mfe = inject(MfeStateService);
-
-  readonly theme = this.mfe.get<string>('theme'); // WritableSignal<string>
-
-  setTheme(theme: string): void {
-    this.mfe.set('theme', theme); // persists + broadcasts cross-tab
-  }
-}
-```
-
-### `ConfigRepositoryService` — generic string KV store
-
-For arbitrary string values that should persist and sync cross-tab independently of the main state:
-
-```typescript
-import { inject } from '@angular/core';
-import { ConfigRepositoryService } from '@dever-labs/ngx-mfe-broker';
-
-@Injectable({ providedIn: 'root' })
-export class ApiConfigService {
-  private readonly config = inject(ConfigRepositoryService);
-
-  readonly apiUrl = this.config.getSignal('apiUrl'); // Signal<string | null>
-
-  setApiUrl(url: string): void {
-    this.config.set('apiUrl', url);
-  }
-}
-```
-
-## How it works
-
-```
-MFE A calls set('theme', 'dark')
-  → Signal.set('dark')
-  → effect() → localStorage.setItem('theme', 'dark')
-  → BroadcastChannel.postMessage({ key: 'theme', value: 'dark' })
-      → Tab B receives message
-      → Signal.set('dark')  (inbound-key guard prevents echo loop)
-      → effect() skips broadcast (key in guard)
-```
-
-- **Same page**: Signals propagate instantly (shared Angular singleton via Native Federation)
-- **Cross-tab**: BroadcastChannel delivers updates to all other tabs on the same origin
-- **Persistence**: localStorage survives page refresh; values are restored on init
-- **No echo loops**: Inbound-key guard + microtask clear prevents re-broadcasting received updates
-
-## API
-
-### `provideNgxMfeBroker(config)`
-
-| Field | Type | Description |
-|---|---|---|
-| `initialState` | `Record<string, unknown>` | All state keys with their default values. Keys not listed here cannot be used at runtime. |
-
-### `MfeStateService`
-
-| Method | Signature | Description |
-|---|---|---|
-| `get<T>(key)` | `(key: string) => WritableSignal<T>` | Returns the signal for a registered key. Throws if the key was not in `initialState`. |
-| `set<T>(key, value)` | `(key: string, value: T) => void` | Updates the signal, persists to localStorage, broadcasts cross-tab. |
-
-### `ConfigRepositoryService`
-
-| Method | Signature | Description |
-|---|---|---|
-| `getSignal(key)` | `(key: string) => Signal<string \| null>` | Readonly signal; initialised from localStorage. |
-| `get(key)` | `(key: string) => string \| null` | Current value. |
-| `set(key, value)` | `(key: string, value: string) => void` | Persists + broadcasts cross-tab. |
-| `remove(key)` | `(key: string) => void` | Removes from localStorage + broadcasts. |
-| `clear()` | `() => void` | Removes **only keys written by this service** from localStorage + broadcasts. |
-
-## Building
-
-```bash
-npm run build   # ng build ngx-mfe-broker --configuration production
-npm test        # Vitest unit tests
-npm run lint    # ESLint
-```
+1. Fork and create a feature branch
+2. Make changes with tests
+3. Run lint + build + test before opening a PR
+4. All checks must pass on the PR before merge
 
 ## License
 
