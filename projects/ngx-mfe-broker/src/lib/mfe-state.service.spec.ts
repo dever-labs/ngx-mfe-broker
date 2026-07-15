@@ -48,9 +48,34 @@ describe('MfeStateService', () => {
     };
   }
 
-  it('returns default value when localStorage is empty', () => {
+  it('writes initialState to localStorage on first boot', () => {
+    // localStorage is empty — shell writes the provided value on init
     const { svc } = setup({ theme: 'light' });
     expect(svc.get<string>('theme')()).toBe('light');
+    expect(localStorage.getItem('theme')).toBe('light');
+  });
+
+  it('throws when a key is missing from localStorage in a browser environment', () => {
+    // Simulate a key that was registered but never written to localStorage
+    // by stubbing storage to always return null for getItem after pass 1.
+    const fakeStorage = {
+      getItem: vi.fn().mockReturnValue(null),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+      length: 0,
+      key: vi.fn(),
+    } as unknown as Storage;
+    vi.stubGlobal('localStorage', fakeStorage);
+
+    expect(() => {
+      TestBed.configureTestingModule({
+        providers: [{ provide: NGX_MFE_INITIAL_STATE, useValue: { theme: 'light' } }],
+      });
+      TestBed.inject(MfeStateService);
+    }).toThrow(/Key "theme" is missing from localStorage/);
+
+    vi.unstubAllGlobals();
   });
 
   it('reads persisted value from localStorage on init', () => {

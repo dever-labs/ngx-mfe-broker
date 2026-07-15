@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-16
+
+### Changed
+- `MfeStateService` no longer falls back to in-memory defaults when a key is missing from localStorage. Instead it uses a two-pass init: first writes shell-provided `initialState` values to localStorage (if not already present), then reads from localStorage exclusively.
+- If a key is missing from localStorage in a browser environment after the init write, an error is thrown immediately — misconfiguration fails loudly rather than silently.
+- SSR/non-browser environments (no localStorage) still use the provided `initialState` value directly.
+- Removed unused `defaults` map from `MfeStateService`.
+- Updated docs to reflect fail-fast semantics and shell ownership of initial values.
+
 ## [0.1.4] - 2026-07-16
 
 ### Changed

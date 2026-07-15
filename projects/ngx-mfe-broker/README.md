@@ -28,7 +28,7 @@ npm install @dever-labs/ngx-mfe-broker
 
 ## Setup
 
-Call `provideNgxMfeBroker()` **once** — in the shell's `app.config.ts`. Remote MFEs reuse the shell's Angular singleton and do not call it again.
+Call `provideNgxMfeBroker()` **once** — in the shell's `app.config.ts`. The shell always loads first and is the sole owner of initial state values. Remote MFEs reuse the shell's Angular singleton and never call it again.
 
 ```typescript
 // shell/src/app/app.config.ts
@@ -38,16 +38,16 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideNgxMfeBroker({
       initialState: {
-        theme: 'light',   // string
-        token: null,      // string | null
-        users: [],        // array — serialised as JSON automatically
+        theme: 'light',   // written to localStorage on first boot if not already present
+        token: null,
+        users: [],        // arrays and objects are serialised as JSON automatically
       }
     }),
   ]
 };
 ```
 
-> **Important:** `get(key)` throws if the key was not registered in `initialState`. All state keys must be declared upfront.
+> **Fail-fast:** if a key is missing from localStorage when the service initialises (in a browser environment), an error is thrown. There are no silent fallbacks — misconfiguration surfaces immediately.
 
 ## State Contract Pattern
 
@@ -235,18 +235,24 @@ export class ApiConfigService {
 ## How it works
 
 ```
+Shell boots → provideNgxMfeBroker({ initialState })
+  → each key written to localStorage if not already present
+  → signals initialised from localStorage
+  → error thrown if any key is missing (no silent fallbacks)
+
 MFE A calls set('theme', 'dark')
   → Signal.set('dark')
   → effect() → localStorage.setItem('theme', 'dark')
   → BroadcastChannel.postMessage({ key: 'theme', value: 'dark' })
       → Tab B receives message
-      → Signal.set('dark')  (inbound-key guard prevents echo loop)
-      → effect() skips broadcast (key in guard)
+      → Signal.set('dark')
+      → effect() skips broadcast (value-based inbound guard)
 ```
 
 - **Same page**: Signals propagate instantly (shared Angular singleton via Native Federation)
 - **Cross-tab**: BroadcastChannel delivers updates to all other tabs on the same origin
-- **Persistence**: localStorage survives page refresh; values are restored on init
+- **Persistence**: localStorage survives page refresh; shell writes on first boot only
+- **Fail-fast**: missing keys throw on init — no silent fallbacks
 - **No echo loops**: Value-based inbound guard prevents re-broadcasting received updates
 
 ## API
@@ -255,7 +261,7 @@ MFE A calls set('theme', 'dark')
 
 | Field | Type | Description |
 |---|---|---|
-| `initialState` | `Record<string, unknown>` | All state keys with their default values. Keys not listed here cannot be used at runtime. |
+| `initialState` | `Record<string, unknown>` | Shell-owned initial values. Each key is written to localStorage on first boot if not already present. Keys not listed here cannot be used at runtime. |
 
 ### `NGX_MFE_INITIAL_STATE`
 
