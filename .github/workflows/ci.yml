@@ -57,6 +57,13 @@ jobs:
 
       - name: Publish to npm
         working-directory: dist/ngx-mfe-broker
-        run: npm publish --access public --provenance
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          EXISTING=$(npm view "@dever-labs/ngx-mfe-broker@${PKG_VERSION}" version 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            echo "Version ${PKG_VERSION} is already published — skipping."
+            exit 0
+          fi
+          npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
