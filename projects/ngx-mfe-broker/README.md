@@ -51,21 +51,25 @@ export const appConfig: ApplicationConfig = {
 
 ## State Contract Pattern
 
-`@dever-labs/ngx-mfe-broker` is intentionally generic — it knows nothing about your app's domain. To get type safety and avoid magic strings across MFEs, introduce a **state contract**: a separate module that owns the state shape, typed keys, defaults, and a typed accessor.
+`@dever-labs/ngx-mfe-broker` is intentionally generic — it knows nothing about your app's domain. To get type safety and avoid magic strings across MFEs, introduce a **state contract**: a shell-owned module that defines the state shape and a typed accessor.
 
-The contract is the only place the word `"theme"` (or any other key) appears as a string literal. Every MFE imports the contract — not the broker directly.
+**The shell team owns and maintains the contract.** MFEs that need a new state key raise a PR against the shell repo — the shell team reviews and merges it. This keeps the shared state surface deliberate and auditable.
+
+The contract is the only place key names appear as string literals. Every MFE imports the contract — not the broker directly.
 
 ```
-┌───────────────────────┐       ┌─────────────────────────────┐
-│  @dever-labs/         │       │  state contract              │
-│  ngx-mfe-broker       │◄──────│  (AppState,                  │
-│  (generic)            │       │   APP_INITIAL_STATE,         │
-└───────────────────────┘       │   injectAppState)            │
-                                └──────────────┬──────────────┘
-                                               │ imported by
-                          ┌────────────────────┼────────────────────┐
-                          ▼                    ▼                    ▼
-                       shell               MFE A               MFE B
+                        owned & maintained by shell team
+                          ┌─────────────────────────────┐
+┌───────────────────────┐ │  state contract              │
+│  @dever-labs/         │ │  (AppState,                  │
+│  ngx-mfe-broker       │◄┤   APP_STATE_KEYS,            │
+│  (generic)            │ │   injectAppState)            │
+└───────────────────────┘ └──────────────┬──────────────┘
+                                         │ imported by
+                    ┌────────────────────┼────────────────────┐
+                    ▼                    ▼                    ▼
+                 shell               MFE A               MFE B
+              (owns defaults)
 ```
 
 The contract lives in a different place depending on whether you have a monorepo or separate repos.
@@ -95,15 +99,11 @@ export interface AppState extends Record<string, unknown> {
   theme: string;
   token: string | null;
   users: string[];
-  // add keys here — compile errors surface everywhere they're used
 }
 
-// satisfies validates defaults against AppState at compile time
-export const APP_INITIAL_STATE = {
-  theme: 'light-theme',
-  token: null,
-  users: [],
-} satisfies AppState;
+// TypeScript interfaces are erased at runtime — this array is the only
+// runtime representation of the keys. Add a key here when you add it to AppState.
+export const APP_STATE_KEYS = ['theme', 'token', 'users'] as const satisfies (keyof AppState)[];
 ```
 
 **`inject-app-state.ts`**
@@ -111,26 +111,31 @@ export const APP_INITIAL_STATE = {
 ```typescript
 import { inject, WritableSignal } from '@angular/core';
 import { MfeStateService } from '@dever-labs/ngx-mfe-broker';
-import { AppState, APP_INITIAL_STATE } from './app-state.model';
+import { AppState, APP_STATE_KEYS } from './app-state.model';
 
 export function injectAppState() {
   const mfe = inject(MfeStateService);
-  // Keys are derived from APP_INITIAL_STATE — adding a key here wires it automatically
   return Object.fromEntries(
-    (Object.keys(APP_INITIAL_STATE) as (keyof AppState)[]).map(key => [key, mfe.get(key)])
+    APP_STATE_KEYS.map(key => [key, mfe.get(key)])
   ) as { [K in keyof AppState]: WritableSignal<AppState[K]> };
 }
 ```
 
-**Shell `app.config.ts`** — only place that calls `provideNgxMfeBroker`:
+**Shell `app.config.ts`** — only place that calls `provideNgxMfeBroker` and the only place that owns defaults:
 
 ```typescript
 import { provideNgxMfeBroker } from '@dever-labs/ngx-mfe-broker';
-import { APP_INITIAL_STATE } from '@app/mfe-state-model';
+import { AppState } from '@app/mfe-state-model';
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideNgxMfeBroker({ initialState: APP_INITIAL_STATE }),
+    provideNgxMfeBroker({
+      initialState: {
+        theme: 'light-theme',
+        token: null,
+        users: [],
+      } satisfies AppState,   // compile error if a key is missing or wrong type
+    }),
   ]
 };
 ```
@@ -152,10 +157,10 @@ export class ThemeToggleComponent {
 
 ### Non-monorepo (separate repos)
 
-Publish the state contract as its own npm package so all repos share the same type definitions and defaults.
+The shell team publishes the contract as its own npm package (to npm or a private registry). MFE teams install it as a dependency and raise PRs against the shell repo when they need new keys.
 
 ```
-@your-org/app-state-model      ← published to npm (or private registry)
+@your-org/app-state-model      ← published by shell team
   src/
     app-state.model.ts
     inject-app-state.ts
@@ -167,7 +172,7 @@ Each MFE repo installs both packages:
 npm install @dever-labs/ngx-mfe-broker @your-org/app-state-model
 ```
 
-The contract package is tiny — just an interface, initial values, and the `inject` wrapper. It has no runtime behaviour and a single peer dependency on `@angular/core`.
+The contract package is tiny — just an interface, a keys array, and the `inject` wrapper. It has no runtime behaviour and a single peer dependency on `@angular/core`.
 
 **`package.json` of the contract package:**
 
@@ -183,7 +188,7 @@ The contract package is tiny — just an interface, initial values, and the `inj
 }
 ```
 
-> **Versioning tip:** When you add or rename a key in `AppState`, bump the minor version of the contract package. All MFE repos that install it get compile errors immediately on update — exactly the desired behaviour.
+> **Versioning tip:** When a key is added or renamed in `AppState`, bump the minor version of the contract package. All MFE repos that install it get compile errors immediately on update — exactly the desired behaviour.
 
 ---
 

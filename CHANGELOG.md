@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-07-16
+
+### Changed
+- State contract pattern: clarified that the contract is **shell-owned** — the shell team maintains it and reviews all change requests from MFE teams
+- Defaults (`initialState`) are explicitly the shell's responsibility; the contract only exports the type shape and key names
+- Updated diagram to show shell ownership; non-monorepo section updated accordingly
+
 ## [0.1.3] - 2026-07-16
 
 ### Changed
