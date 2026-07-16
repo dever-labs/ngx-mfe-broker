@@ -1,6 +1,6 @@
 # ngx-mfe-broker
 
-> Monorepo for `@dever-labs/ngx-mfe-broker` — Angular Signals + BroadcastChannel state broker for micro-frontends.
+> Repository for `@dever-labs/ngx-mfe-broker` — an Angular library for sharing state across micro-frontends and browser tabs using Signals, BroadcastChannel, and localStorage.
 
 [![npm](https://img.shields.io/npm/v/@dever-labs/ngx-mfe-broker)](https://www.npmjs.com/package/@dever-labs/ngx-mfe-broker)
 [![CI](https://github.com/dever-labs/ngx-mfe-broker/actions/workflows/ci.yml/badge.svg)](https://github.com/dever-labs/ngx-mfe-broker/actions)
