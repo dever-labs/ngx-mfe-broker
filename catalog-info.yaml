@@ -1,0 +1,25 @@
+# Describes this repository in devhub (https://hub.dever.dk), dever-labs'
+# developer portal. devhub's GitHub discovery reads this file from the
+# default branch.
+#   devhub/install  how to install it (Install card), <channel>:<id>, comma-separated
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ngx-mfe-broker
+  namespace: devtools
+  title: ngx-mfe-broker
+  description: >
+    @dever-labs/ngx-mfe-broker — Angular Signals + BroadcastChannel state
+    broker that shares state across micro-frontends and browser tabs.
+  annotations:
+    github.com/project-slug: dever-labs/ngx-mfe-broker
+    devhub/install: npm:@dever-labs/ngx-mfe-broker
+  tags: [typescript, angular, micro-frontends]
+  links:
+    - url: https://www.npmjs.com/package/@dever-labs/ngx-mfe-broker
+      title: npm package
+spec:
+  type: library
+  lifecycle: production
+  owner: group:devtools/engineering
+  system: system:devtools/libraries
